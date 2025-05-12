@@ -1,38 +1,41 @@
-"""
-Generate individual 50x50 ECG images in a healthy state
-based on erroneous predictions of the model to ECG in healthy state
-"""
-
 import ECG_CNN as cnn
 import cv2
-import matplotlib.pyplot as plt
+import os
 from datetime import datetime
-import time
 
+def save_healthy_ecg_from_folder(model_path, input_folder, output_folder, ecg_rows=3, ecg_cols=7):
+    x_distance, y_distance = 50, 50
+    width, height = ecg_cols * x_distance, ecg_rows * y_distance
+    
+    os.makedirs(output_folder, exist_ok=True)
 
+    for filename in os.listdir(input_folder):
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            img_path = os.path.join(input_folder, filename)
+            img = cv2.imread(img_path)
+            if img is None:
+                print(f"Warning: Couldn't read {img_path}")
+                continue
 
-def save_healthy_ecg(model_path, img, ecg_rows, ecg_cols):
-    width = 1920
-    height = 1080
-    x_distance = int(width / ecg_cols)
-    y_distance = int(height / ecg_rows)
-    pt1 = [0,0]
-    pt2 = [x_distance,y_distance]
-    img = cv2.resize(img, (width,height), interpolation = cv2.INTER_AREA)
+            img = cv2.resize(img, (width, height), interpolation=cv2.INTER_AREA)
 
-    for _ in range (ecg_rows):
-        for _ in range(ecg_cols):
-            cutted_image = img[pt1[1]:pt2[1], pt1[0]:pt2[0]]
-            prediction = int(cnn.prediction(model_path,cutted_image))
+            for row in range(ecg_rows):
+                for col in range(ecg_cols):
+                    x_start, y_start = col * x_distance, row * y_distance
+                    x_end, y_end = x_start + x_distance, y_start + y_distance
+                    cut_img = img[y_start:y_end, x_start:x_end]
 
-            if prediction != 0:
-                date = datetime.now().strftime("%d-%H-%M-%S")
-                cv2.imwrite(f'test/generador-sano/sano-{date}.jpg',cutted_image)
-                time.sleep(1)
+                    prediction = int(cnn.prediction(model_path, cut_img))
+                    if prediction != 0:  # Model falsely detects issue
+                        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+                        out_path = os.path.join(output_folder, f'sano-{timestamp}.jpg')
+                        cv2.imwrite(out_path, cut_img)
 
-            pt1[0] += x_distance; pt2[0] += x_distance
-        
-        pt1[0] = 0; pt1[1] += y_distance; pt2[0] = x_distance; pt2[1] += y_distance
-
-
-risk_image = save_healthy_ecg('models/ondas.hdf5', cv2.imread('src/full/edges.jpg'), 3, 7)
+# usage
+save_healthy_ecg_from_folder(
+    model_path='models/ondas.hdf5',
+    input_folder='src/full/',
+    output_folder='test/generador-sano/',
+    ecg_rows=3,
+    ecg_cols=7
+)
